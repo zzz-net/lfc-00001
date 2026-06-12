@@ -166,6 +166,29 @@ curl -X GET "http://localhost:8000/api/audit/reimbursement/1"
 
 每条记录包含：操作人ID、动作、前后状态、时间戳。
 
+### 第8步：驳回后修改重提（可选）
+
+如果经理驳回了报销单，员工可以修改后重新提交：
+
+```bash
+# 驳回后修改金额和描述（状态自动从 rejected 转回 draft）
+curl -X PUT "http://localhost:8000/api/reimbursements/1?user_id=2" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"amount\":600,\"description\":\"差旅费-北京出差（调整金额）\"}"
+
+# 重新提交
+curl -X POST "http://localhost:8000/api/reimbursements/1/submit?user_id=2"
+
+# 经理再次审批
+curl -X POST "http://localhost:8000/api/reimbursements/1/approve?manager_id=1"
+```
+
+**预期结果**：
+- PUT 返回状态为 `draft`，金额已更新
+- 重新提交后状态为 `submitted`
+- 审批后状态为 `manager_approved`
+- 审计日志包含 `update: rejected → draft` 记录
+
 ---
 
 ## 边界情况测试（必须全部失败）
@@ -401,7 +424,7 @@ curl -X GET "http://localhost:8000/api/audit/reimbursement/6"
 |------|------|------|
 | POST | /api/reimbursements | 创建报销单 |
 | GET | /api/reimbursements/{id} | 查询报销单详情 |
-| PUT | /api/reimbursements/{id} | 修改报销单（仅草稿状态） |
+| PUT | /api/reimbursements/{id} | 修改报销单（草稿/已驳回状态；驳回修改后自动转回 draft） |
 | POST | /api/reimbursements/{id}/submit | 提交报销单 |
 | POST | /api/reimbursements/{id}/approve | 经理审批通过 |
 | POST | /api/reimbursements/{id}/reject | 经理驳回 |

@@ -82,12 +82,13 @@ def update_reimbursement(db: Session, reimbursement_id: int, data: Reimbursement
         if reimbursement.employee_id != user_id:
             raise HTTPException(status_code=403, detail="无权修改他人报销单")
 
-        if reimbursement.status != ReimbursementStatus.DRAFT:
-            raise HTTPException(status_code=400, detail="只能修改草稿状态的报销单")
+        if reimbursement.status not in [ReimbursementStatus.DRAFT, ReimbursementStatus.REJECTED]:
+            raise HTTPException(status_code=400, detail="只能修改草稿或已驳回状态的报销单")
+
+        if data.amount is None and data.description is None:
+            raise HTTPException(status_code=400, detail="至少修改一项内容")
 
         before_status = reimbursement.status
-        before_amount = reimbursement.amount
-        before_desc = reimbursement.description
 
         if data.amount is not None:
             if data.amount <= 0:
@@ -99,8 +100,13 @@ def update_reimbursement(db: Session, reimbursement_id: int, data: Reimbursement
         if data.description is not None:
             reimbursement.description = data.description
 
-        if data.amount is not None or data.description is not None:
-            _record_audit_log(db, reimbursement.id, user_id, ActionType.UPDATE, before_status, reimbursement.status)
+        after_status = reimbursement.status
+        if before_status == ReimbursementStatus.REJECTED:
+            _validate_status_transition(before_status, ReimbursementStatus.DRAFT)
+            reimbursement.status = ReimbursementStatus.DRAFT
+            after_status = ReimbursementStatus.DRAFT
+
+        _record_audit_log(db, reimbursement.id, user_id, ActionType.UPDATE, before_status, after_status)
 
         db.commit()
         db.refresh(reimbursement)
