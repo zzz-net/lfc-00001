@@ -4,7 +4,7 @@ import random
 import logging
 from datetime import datetime
 from sqlalchemy.orm import Session
-from app.database import SessionLocal, SYSTEM_USER_ID
+from app.database import SessionLocal, SYSTEM_USER_ID, SYSTEM_USER_ROLE
 from app.models import (
     PaymentTask,
     PaymentTaskStatus,
@@ -154,7 +154,19 @@ class PaymentWorker:
         time.sleep(0.5)
         return True
 
+    def _get_system_user_id(self, db: Session):
+        system_user = db.query(User).filter(User.id == SYSTEM_USER_ID).first()
+        if not system_user:
+            system_user = db.query(User).filter(User.role == SYSTEM_USER_ROLE).first()
+        if not system_user:
+            return None
+        return system_user.id
+
     def _mark_payment_successful(self, db: Session, task: PaymentTask, reimbursement: Reimbursement):
+        system_user_id = self._get_system_user_id(db)
+        if system_user_id is None:
+            raise RuntimeError("自动任务执行主体（系统用户）不存在，请检查数据库初始化")
+
         before_status = reimbursement.status
 
         task.status = PaymentTaskStatus.COMPLETED
@@ -166,7 +178,7 @@ class PaymentWorker:
 
         log = AuditLog(
             reimbursement_id=reimbursement.id,
-            operator_id=SYSTEM_USER_ID,
+            operator_id=system_user_id,
             action=ActionType.AUTO_PAY,
             before_status=before_status,
             after_status=ReimbursementStatus.PAID
@@ -186,14 +198,17 @@ class PaymentWorker:
 
         db.flush()
 
-        log = AuditLog(
-            reimbursement_id=reimbursement.id,
-            operator_id=SYSTEM_USER_ID,
-            action=ActionType.PAYMENT_FAILED,
-            before_status=reimbursement.status,
-            after_status=reimbursement.status
-        )
-        db.add(log)
+        system_user_id = self._get_system_user_id(db)
+        if system_user_id is not None:
+            log = AuditLog(
+                reimbursement_id=reimbursement.id,
+                operator_id=system_user_id,
+                action=ActionType.PAYMENT_FAILED,
+                before_status=reimbursement.status,
+                after_status=reimbursement.status
+            )
+            db.add(log)
+
         db.commit()
 
     def manual_retry_task(self, task_id: int) -> PaymentTask:
@@ -219,14 +234,16 @@ class PaymentWorker:
             ).first()
 
             if reimbursement:
-                log = AuditLog(
-                    reimbursement_id=reimbursement.id,
-                    operator_id=SYSTEM_USER_ID,
-                    action=ActionType.PAYMENT_RETRY,
-                    before_status=reimbursement.status,
-                    after_status=reimbursement.status
-                )
-                db.add(log)
+                system_user_id = self._get_system_user_id(db)
+                if system_user_id is not None:
+                    log = AuditLog(
+                        reimbursement_id=reimbursement.id,
+                        operator_id=system_user_id,
+                        action=ActionType.PAYMENT_RETRY,
+                        before_status=reimbursement.status,
+                        after_status=reimbursement.status
+                    )
+                    db.add(log)
 
             db.commit()
             db.refresh(task)

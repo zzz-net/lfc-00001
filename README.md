@@ -162,9 +162,11 @@ curl -X GET "http://localhost:8000/api/audit/reimbursement/1"
 - create: null → draft
 - submit: draft → submitted
 - approve: submitted → manager_approved
-- pay: manager_approved → paid
+- auto_pay: manager_approved → paid  （后台自动任务，operator_id=0 表示"系统"）
 
 每条记录包含：操作人ID、动作、前后状态、时间戳。
+- `pay` 动作：operator_id 为真实财务用户 ID，表示人工手动打款
+- `auto_pay` 动作：operator_id=0，表示后台自动任务执行（系统用户）
 
 ### 第8步：驳回后修改重提（可选）
 
