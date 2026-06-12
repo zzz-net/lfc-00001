@@ -11,6 +11,10 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
+SYSTEM_USER_ID = 0
+SYSTEM_USER_NAME = "系统"
+SYSTEM_USER_ROLE = "system"
+
 def get_db():
     db = SessionLocal()
     try:
@@ -21,3 +25,23 @@ def get_db():
 def init_db():
     from app import models
     Base.metadata.create_all(bind=engine)
+
+    db = SessionLocal()
+    try:
+        system_user = db.query(models.User).filter(
+            models.User.id == SYSTEM_USER_ID
+        ).first()
+        if not system_user:
+            system_user = models.User(
+                id=SYSTEM_USER_ID,
+                name=SYSTEM_USER_NAME,
+                role=SYSTEM_USER_ROLE,
+                manager_id=None
+            )
+            db.add(system_user)
+            db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"创建系统用户失败: {e}")
+    finally:
+        db.close()

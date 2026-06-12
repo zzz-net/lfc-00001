@@ -19,6 +19,7 @@ class ActionType(PyEnum):
     UPDATE = "update"
     PAYMENT_FAILED = "payment_failed"
     PAYMENT_RETRY = "payment_retry"
+    AUTO_PAY = "auto_pay"
 
 class PaymentTaskStatus(PyEnum):
     PENDING = "pending"

@@ -4,7 +4,7 @@ import random
 import logging
 from datetime import datetime
 from sqlalchemy.orm import Session
-from app.database import SessionLocal
+from app.database import SessionLocal, SYSTEM_USER_ID
 from app.models import (
     PaymentTask,
     PaymentTaskStatus,
@@ -164,13 +164,10 @@ class PaymentWorker:
         reimbursement.status = ReimbursementStatus.PAID
         db.flush()
 
-        finance_user = db.query(User).filter(User.role == "finance").first()
-        operator_id = finance_user.id if finance_user else 0
-
         log = AuditLog(
             reimbursement_id=reimbursement.id,
-            operator_id=operator_id,
-            action=ActionType.PAY,
+            operator_id=SYSTEM_USER_ID,
+            action=ActionType.AUTO_PAY,
             before_status=before_status,
             after_status=ReimbursementStatus.PAID
         )
@@ -189,12 +186,9 @@ class PaymentWorker:
 
         db.flush()
 
-        finance_user = db.query(User).filter(User.role == "finance").first()
-        operator_id = finance_user.id if finance_user else 0
-
         log = AuditLog(
             reimbursement_id=reimbursement.id,
-            operator_id=operator_id,
+            operator_id=SYSTEM_USER_ID,
             action=ActionType.PAYMENT_FAILED,
             before_status=reimbursement.status,
             after_status=reimbursement.status
@@ -227,7 +221,7 @@ class PaymentWorker:
             if reimbursement:
                 log = AuditLog(
                     reimbursement_id=reimbursement.id,
-                    operator_id=0,
+                    operator_id=SYSTEM_USER_ID,
                     action=ActionType.PAYMENT_RETRY,
                     before_status=reimbursement.status,
                     after_status=reimbursement.status
