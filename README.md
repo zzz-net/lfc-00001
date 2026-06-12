@@ -162,11 +162,16 @@ curl -X GET "http://localhost:8000/api/audit/reimbursement/1"
 - create: null → draft
 - submit: draft → submitted
 - approve: submitted → manager_approved
-- auto_pay: manager_approved → paid  （后台自动任务，operator_id=0 表示"系统"）
+- auto_pay: manager_approved → paid  （后台自动任务）
 
 每条记录包含：操作人ID、动作、前后状态、时间戳。
 - `pay` 动作：operator_id 为真实财务用户 ID，表示人工手动打款
-- `auto_pay` 动作：operator_id=0，表示后台自动任务执行（系统用户）
+- `auto_pay` 动作：operator_id 为自动任务执行人 ID，解析规则如下：
+
+**自动打款执行人解析规则（按优先级）**：
+1. 先查找 `role = 'system'` 的用户（系统自动任务账号），取 ID 最小的
+2. 找不到则 fallback 到 `role = 'finance'` 的用户（财务账号），取 ID 最小的
+3. 两者都找不到：打款任务标记 `FAILED`，错误信息写明"未找到可用执行人"，报销单保持 `manager_approved`，**不写任何 operator_id 非法的审计日志**
 
 ### 第8步：驳回后修改重提（可选）
 
@@ -382,9 +387,9 @@ curl -X GET "http://localhost:8000/api/audit/reimbursement/6"
 - create: null → draft
 - submit: draft → submitted
 - approve: submitted → manager_approved
-- payment_failed: manager_approved → manager_approved
-- payment_retry: manager_approved → manager_approved
-- pay: manager_approved → paid
+- payment_failed: manager_approved → manager_approved  （operator_id=0，系统用户）
+- payment_retry: manager_approved → manager_approved   （operator_id=0，系统用户）
+- auto_pay: manager_approved → paid                    （operator_id=0，系统用户）
 
 ---
 

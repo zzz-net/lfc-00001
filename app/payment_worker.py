@@ -4,7 +4,7 @@ import random
 import logging
 from datetime import datetime
 from sqlalchemy.orm import Session
-from app.database import SessionLocal, SYSTEM_USER_ID, SYSTEM_USER_ROLE
+from app.database import SessionLocal
 from app.models import (
     PaymentTask,
     PaymentTaskStatus,
@@ -154,18 +154,20 @@ class PaymentWorker:
         time.sleep(0.5)
         return True
 
-    def _get_system_user_id(self, db: Session):
-        system_user = db.query(User).filter(User.id == SYSTEM_USER_ID).first()
-        if not system_user:
-            system_user = db.query(User).filter(User.role == SYSTEM_USER_ROLE).first()
-        if not system_user:
-            return None
-        return system_user.id
+    def _resolve_auto_pay_operator(self, db: Session):
+        operator = db.query(User).filter(User.role == "system").order_by(User.id.asc()).first()
+        source = "system"
+        if not operator:
+            operator = db.query(User).filter(User.role == "finance").order_by(User.id.asc()).first()
+            source = "finance"
+        if not operator:
+            return None, None
+        return operator.id, source
 
     def _mark_payment_successful(self, db: Session, task: PaymentTask, reimbursement: Reimbursement):
-        system_user_id = self._get_system_user_id(db)
-        if system_user_id is None:
-            raise RuntimeError("自动任务执行主体（系统用户）不存在，请检查数据库初始化")
+        operator_id, source = self._resolve_auto_pay_operator(db)
+        if operator_id is None:
+            raise RuntimeError("自动打款未找到可用执行人：数据库中无 system 或 finance 角色用户")
 
         before_status = reimbursement.status
 
@@ -178,13 +180,14 @@ class PaymentWorker:
 
         log = AuditLog(
             reimbursement_id=reimbursement.id,
-            operator_id=system_user_id,
+            operator_id=operator_id,
             action=ActionType.AUTO_PAY,
             before_status=before_status,
             after_status=ReimbursementStatus.PAID
         )
         db.add(log)
         db.commit()
+        logger.info(f"Task {task.id}: auto_pay executed by operator_id={operator_id} (source={source})")
 
     def _mark_payment_failed(self, db: Session, task: PaymentTask, reimbursement: Reimbursement, error_msg: str):
         task.retry_count += 1
@@ -198,11 +201,11 @@ class PaymentWorker:
 
         db.flush()
 
-        system_user_id = self._get_system_user_id(db)
-        if system_user_id is not None:
+        operator_id, _ = self._resolve_auto_pay_operator(db)
+        if operator_id is not None:
             log = AuditLog(
                 reimbursement_id=reimbursement.id,
-                operator_id=system_user_id,
+                operator_id=operator_id,
                 action=ActionType.PAYMENT_FAILED,
                 before_status=reimbursement.status,
                 after_status=reimbursement.status
@@ -234,11 +237,11 @@ class PaymentWorker:
             ).first()
 
             if reimbursement:
-                system_user_id = self._get_system_user_id(db)
-                if system_user_id is not None:
+                operator_id, _ = self._resolve_auto_pay_operator(db)
+                if operator_id is not None:
                     log = AuditLog(
                         reimbursement_id=reimbursement.id,
-                        operator_id=system_user_id,
+                        operator_id=operator_id,
                         action=ActionType.PAYMENT_RETRY,
                         before_status=reimbursement.status,
                         after_status=reimbursement.status
