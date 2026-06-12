@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
-from app.models import ReimbursementStatus, ActionType, PaymentTaskStatus
+from app.models import ReimbursementStatus, ActionType, PaymentTaskStatus, ImportBatchStatus, ImportLineStatus
 from typing import Optional
 
 class UserCreate(BaseModel):
@@ -21,6 +21,7 @@ class ReimbursementCreate(BaseModel):
     employee_id: int
     amount: float = Field(gt=0, description="金额必须大于0")
     description: str
+    external_id: str | None = None
 
     @field_validator('amount')
     @classmethod
@@ -46,6 +47,8 @@ class ReimbursementResponse(BaseModel):
     amount: float
     description: str
     status: ReimbursementStatus
+    external_id: str | None
+    import_batch_id: int | None
     created_at: datetime
     updated_at: datetime | None
 
@@ -59,6 +62,7 @@ class AuditLogResponse(BaseModel):
     action: ActionType
     before_status: ReimbursementStatus | None
     after_status: ReimbursementStatus | None
+    import_batch_id: int | None
     created_at: datetime
 
     class Config:
@@ -104,3 +108,38 @@ class RejectionRequest(BaseModel):
 class PaymentRequest(BaseModel):
     reimbursement_id: int
     finance_id: int
+
+class ImportBatchResponse(BaseModel):
+    id: int
+    operator_id: int
+    file_name: str
+    total_count: int
+    success_count: int
+    skipped_count: int
+    failed_count: int
+    status: ImportBatchStatus
+    created_at: datetime
+    completed_at: datetime | None
+
+    class Config:
+        from_attributes = True
+
+class ImportLineResponse(BaseModel):
+    id: int
+    batch_id: int
+    line_number: int
+    external_id: str | None
+    employee_id: int | None
+    amount: float | None
+    description: str | None
+    status: ImportLineStatus
+    error_message: str | None
+    reimbursement_id: int | None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ImportBatchResultResponse(BaseModel):
+    batch: ImportBatchResponse
+    lines: list[ImportLineResponse]

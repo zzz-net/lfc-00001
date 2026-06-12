@@ -15,16 +15,27 @@ def create_reimbursement(db: Session, data: ReimbursementCreate):
     if data.amount > MAX_REIMBURSEMENT_AMOUNT:
         raise HTTPException(status_code=400, detail=f"金额超过上限 {MAX_REIMBURSEMENT_AMOUNT}")
 
+    if not data.description or not data.description.strip():
+        raise HTTPException(status_code=400, detail="描述不能为空")
+
     employee = db.query(User).filter(User.id == data.employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="员工不存在")
+
+    if data.external_id:
+        existing = db.query(Reimbursement).filter(
+            Reimbursement.external_id == data.external_id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="外部单号已存在")
 
     try:
         reimbursement = Reimbursement(
             employee_id=data.employee_id,
             amount=data.amount,
             description=data.description,
-            status=ReimbursementStatus.DRAFT
+            status=ReimbursementStatus.DRAFT,
+            external_id=data.external_id
         )
         db.add(reimbursement)
         db.flush()
@@ -40,10 +51,28 @@ def create_reimbursement(db: Session, data: ReimbursementCreate):
         db.commit()
         db.refresh(reimbursement)
         return reimbursement
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"创建报销单失败: {e}")
         raise HTTPException(status_code=500, detail="创建报销单失败")
+
+
+def list_reimbursements(db: Session, user_id: int, employee_id: int | None = None, skip: int = 0, limit: int = 100):
+    current_user = db.query(User).filter(User.id == user_id).first()
+    if not current_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    query = db.query(Reimbursement)
+    
+    if current_user.role == "employee":
+        query = query.filter(Reimbursement.employee_id == user_id)
+    elif employee_id is not None:
+        query = query.filter(Reimbursement.employee_id == employee_id)
+    
+    return query.order_by(Reimbursement.id.desc()).offset(skip).limit(limit).all()
 
 
 def get_reimbursement(db: Session, reimbursement_id: int):

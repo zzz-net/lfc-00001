@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.routes import reimbursement, audit, payment
+from app.routes import reimbursement, audit, payment, import_batch
 from app.database import init_db, SessionLocal
 from app.payment_worker import payment_worker
 from app.services.payment_service import reset_stuck_processing_tasks
@@ -60,6 +60,7 @@ app.add_middleware(
 app.include_router(reimbursement.router, prefix="/api/reimbursements", tags=["报销单"])
 app.include_router(audit.router, prefix="/api/audit", tags=["审计日志"])
 app.include_router(payment.router, prefix="/api/payment", tags=["财务打款"])
+app.include_router(import_batch.router, prefix="/api/import", tags=["批量导入"])
 
 
 @app.get("/", tags=["系统"])

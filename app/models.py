@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Enum, Boolean, Text
 from sqlalchemy.sql import func
 from app.database import Base
 from enum import Enum as PyEnum
@@ -20,6 +20,7 @@ class ActionType(PyEnum):
     PAYMENT_FAILED = "payment_failed"
     PAYMENT_RETRY = "payment_retry"
     AUTO_PAY = "auto_pay"
+    BATCH_IMPORT = "batch_import"
 
 class PaymentTaskStatus(PyEnum):
     PENDING = "pending"
@@ -27,6 +28,16 @@ class PaymentTaskStatus(PyEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+class ImportBatchStatus(PyEnum):
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class ImportLineStatus(PyEnum):
+    SUCCESS = "success"
+    SKIPPED = "skipped"
+    FAILED = "failed"
 
 class User(Base):
     __tablename__ = "users"
@@ -44,6 +55,8 @@ class Reimbursement(Base):
     amount = Column(Float)
     description = Column(String)
     status = Column(Enum(ReimbursementStatus))
+    external_id = Column(String, index=True, nullable=True)
+    import_batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -56,6 +69,7 @@ class AuditLog(Base):
     action = Column(Enum(ActionType))
     before_status = Column(Enum(ReimbursementStatus))
     after_status = Column(Enum(ReimbursementStatus))
+    import_batch_id = Column(Integer, ForeignKey("import_batches.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class PaymentTask(Base):
@@ -71,3 +85,32 @@ class PaymentTask(Base):
     is_processed = Column(Boolean, default=False)
     error_message = Column(String, nullable=True)
     last_attempt_at = Column(DateTime(timezone=True), nullable=True)
+
+class ImportBatch(Base):
+    __tablename__ = "import_batches"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    operator_id = Column(Integer, ForeignKey("users.id"))
+    file_name = Column(String)
+    total_count = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    skipped_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    status = Column(Enum(ImportBatchStatus), default=ImportBatchStatus.PROCESSING)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+class ImportLine(Base):
+    __tablename__ = "import_lines"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    batch_id = Column(Integer, ForeignKey("import_batches.id"), index=True)
+    line_number = Column(Integer)
+    external_id = Column(String, index=True, nullable=True)
+    employee_id = Column(Integer, nullable=True)
+    amount = Column(Float, nullable=True)
+    description = Column(String, nullable=True)
+    status = Column(Enum(ImportLineStatus))
+    error_message = Column(String, nullable=True)
+    reimbursement_id = Column(Integer, ForeignKey("reimbursements.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
