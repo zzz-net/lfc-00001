@@ -430,6 +430,7 @@ curl -X GET "http://localhost:8000/api/audit/reimbursement/6"
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | /api/reimbursements | 创建报销单 |
+| GET | /api/reimbursements | 查询报销单列表（`user_id` 必填；employee 只看自己的） |
 | GET | /api/reimbursements/{id} | 查询报销单详情 |
 | PUT | /api/reimbursements/{id} | 修改报销单（草稿/已驳回状态；驳回修改后自动转回 draft） |
 | POST | /api/reimbursements/{id}/submit | 提交报销单 |
@@ -505,13 +506,16 @@ lfc-00001/
 │   │   ├── reimbursement_service.py
 │   │   ├── user_service.py
 │   │   ├── audit_service.py
-│   │   └── payment_service.py
+│   │   ├── payment_service.py
+│   │   └── import_service.py    # 批量导入服务
 │   └── routes/              # API 路由层
 │       ├── __init__.py
 │       ├── reimbursement.py
 │       ├── audit.py
-│       └── payment.py
+│       ├── payment.py
+│       └── import_batch.py      # 批量导入路由
 ├── init_test_data.py        # 自动化测试脚本
+├── test_batch_import.py     # 批量导入专项测试
 ├── requirements.txt
 ├── start.py
 └── README.md
